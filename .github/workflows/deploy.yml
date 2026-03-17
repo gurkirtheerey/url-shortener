@@ -1,8 +1,10 @@
-name: Deploy to DigitalOcean
+name: Deploy
 
 on:
   push:
     branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 jobs:
   deploy:
@@ -14,9 +16,47 @@ jobs:
           host: ${{ secrets.DROPLET_HOST }}
           username: root
           key: ${{ secrets.DROPLET_SSH_KEY }}
+          envs: GITHUB_EVENT_NAME,GITHUB_HEAD_REF
           script: |
-            cd ~/url-shortener
-            git pull origin main
-            echo '${{ secrets.DROPLET_ENV }}' > .env
-            docker compose -f docker-compose.prod.yml up -d --build
+            set -e
+
+            # Bootstrap shared network and directory layout (idempotent)
+            docker network create caddy-net 2>/dev/null || true
+            mkdir -p ~/linksmith/{prod,dev,caddy}
+
+            if [ ! -d ~/linksmith/prod/.git ]; then
+              git clone https://github.com/gurkirtheerey/url-shortener.git ~/linksmith/prod
+            fi
+            if [ ! -d ~/linksmith/dev/.git ]; then
+              git clone https://github.com/gurkirtheerey/url-shortener.git ~/linksmith/dev
+            fi
+
+            if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+              # Production deploy
+              DEPLOY_DIR=~/linksmith/prod
+              cd "$DEPLOY_DIR"
+              git pull origin main
+              echo '${{ secrets.DROPLET_ENV_PROD }}' > .env.prod
+              docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+            else
+              # Dev deploy from PR branch
+              DEPLOY_DIR=~/linksmith/dev
+              cd "$DEPLOY_DIR"
+              git fetch origin
+              git checkout "$GITHUB_HEAD_REF"
+              git pull origin "$GITHUB_HEAD_REF"
+              echo '${{ secrets.DROPLET_ENV_DEV }}' > .env.dev
+              docker compose -f docker-compose.prod.yml --env-file .env.dev up -d --build
+            fi
+
+            # Sync Caddy config from whichever directory just deployed
+            cp "$DEPLOY_DIR/Caddyfile" ~/linksmith/caddy/Caddyfile
+            cp "$DEPLOY_DIR/docker-compose.caddy.yml" ~/linksmith/caddy/docker-compose.yml
+            cd ~/linksmith/caddy
+            docker compose up -d
+            docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || true
+
             docker image prune -f
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
