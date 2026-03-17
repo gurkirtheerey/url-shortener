@@ -27,6 +27,16 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+func handleHealthCheck(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := store.Ping(r.Context()); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "database unreachable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
+}
+
 // handleShorten returns a handler function that creates a new short URL.
 //
 // This pattern (a function that returns a function) is called a "closure."

@@ -17,7 +17,7 @@ var testStore *Store
 func TestMain(m *testing.M) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		databaseURL = "postgres://localhost:5432/url_shortener"
+		databaseURL = "postgres://localhost:5432/url_shortener_test"
 	}
 
 	var err error
@@ -50,12 +50,33 @@ func cleanupURLs(t *testing.T) {
 
 func setupRouter() *chi.Mux {
 	r := chi.NewRouter()
+	r.Get("/health", handleHealthCheck(testStore))
 	r.Post("/api/shorten", handleShorten(testStore, "http://localhost:8080"))
 	r.Get("/api/urls", handleListURLs(testStore))
 	r.Get("/api/urls/{code}/stats", handleGetStats(testStore))
 	r.Delete("/api/urls/{code}", handleDeleteURL(testStore))
 	r.Get("/{code}", handleRedirect(testStore))
 	return r
+}
+
+func TestHealthCheck(t *testing.T) {
+	r := setupRouter()
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]string
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp["status"] != "ok" {
+		t.Errorf("expected status ok, got %s", resp["status"])
+	}
 }
 
 func TestShortenURL(t *testing.T) {

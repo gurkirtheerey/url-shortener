@@ -48,6 +48,10 @@ func (s *Store) Close() {
 	s.pool.Close()
 }
 
+func (s *Store) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}
+
 // CreateURL inserts a new shortened URL. It works in two steps:
 // 1. Get the next auto-increment ID from Postgres's sequence
 // 2. Convert that ID to a base62 short code and insert the full row
