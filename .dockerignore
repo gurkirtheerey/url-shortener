@@ -3,3 +3,8 @@
 migrations/
 CLAUDE.md
 README.md
+dashboard/node_modules
+dashboard/.next
+docker-compose.yml
+Dockerfile.dev
+dump.sql

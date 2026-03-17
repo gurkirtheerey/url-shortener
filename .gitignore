@@ -12,4 +12,9 @@ url-shortener
 
 # OS
 .DS_Store
+
+# API collection
 bruno/
+
+# Database dumps
+dump.sql
