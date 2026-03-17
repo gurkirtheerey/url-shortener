@@ -1,7 +1,9 @@
 services:
   db:
     image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-db
     restart: unless-stopped
+    command: postgres -c shared_buffers=32MB -c work_mem=2MB
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -19,40 +21,36 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME}-api
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
-      CORS_ORIGIN: https://app.linksmith.cc
-      BASE_URL: https://api.linksmith.cc
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      BASE_URL: ${BASE_URL}
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - default
+      - caddy-net
 
   dashboard:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: https://api.linksmith.cc
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    container_name: ${COMPOSE_PROJECT_NAME}-dashboard
     restart: unless-stopped
     depends_on:
       - api
+    networks:
+      - default
+      - caddy-net
 
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - api
-      - dashboard
+networks:
+  caddy-net:
+    external: true
 
 volumes:
   pgdata:
-  caddy_data:
-  caddy_config:

@@ -1,7 +1,15 @@
 app.linksmith.cc {
-    reverse_proxy dashboard:3000
+    reverse_proxy linksmith-prod-dashboard:3000
 }
 
 api.linksmith.cc {
-    reverse_proxy api:8080
+    reverse_proxy linksmith-prod-api:8080
+}
+
+app.dev.linksmith.cc {
+    reverse_proxy linksmith-dev-dashboard:3000
+}
+
+api.dev.linksmith.cc {
+    reverse_proxy linksmith-dev-api:8080
 }

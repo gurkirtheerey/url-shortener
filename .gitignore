@@ -3,6 +3,8 @@ url-shortener
 
 # Environment
 .env
+.env.dev
+.env.prod
 
 # IDE
 .idea/
