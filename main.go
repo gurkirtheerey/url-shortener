@@ -45,8 +45,12 @@ func main() {
 	// Recoverer catches panics in handlers and returns a 500 instead of crashing the server.
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	allowedOrigins := []string{"http://localhost:*"}
+	if extra := os.Getenv("CORS_ORIGIN"); extra != "" {
+		allowedOrigins = append(allowedOrigins, extra)
+	}
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:*"},
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: false,
