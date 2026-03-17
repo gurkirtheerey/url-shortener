@@ -11,13 +11,18 @@ jobs:
     name: Go (lint, test, build)
     runs-on: ubuntu-latest
 
+    env:
+      POSTGRES_DB: url_shortener_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${{ github.token }}
+
     services:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: url_shortener_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
         ports:
           - 5432:5432
         options: >-
@@ -38,14 +43,14 @@ jobs:
         env:
           PGHOST: localhost
           PGPORT: 5432
-          PGUSER: postgres
-          PGPASSWORD: postgres
-          PGDATABASE: url_shortener_test
+          PGUSER: ${{ env.POSTGRES_USER }}
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          PGDATABASE: ${{ env.POSTGRES_DB }}
 
       - name: Run tests
         run: go test -v -race ./...
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/url_shortener_test
+          DATABASE_URL: postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
 
       - name: Build
         run: go build -o server .
