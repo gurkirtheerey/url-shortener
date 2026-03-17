@@ -1,21 +1,7 @@
-{$DOMAIN} {
-    # API routes
-    handle /api/* {
-        reverse_proxy api:8080
-    }
+app.linksmith.cc {
+    reverse_proxy dashboard:3000
+}
 
-    # Next.js static assets and internals
-    handle /_next/* {
-        reverse_proxy dashboard:3000
-    }
-
-    # Dashboard root
-    handle / {
-        reverse_proxy dashboard:3000
-    }
-
-    # Everything else is a short code redirect
-    handle {
-        reverse_proxy api:8080
-    }
+api.linksmith.cc {
+    reverse_proxy api:8080
 }
