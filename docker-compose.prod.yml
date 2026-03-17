@@ -20,11 +20,10 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    ports:
-      - "8080:8080"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
-      CORS_ORIGIN: ${DASHBOARD_URL}
+      CORS_ORIGIN: https://app.linksmith.cc
+      BASE_URL: https://api.linksmith.cc
     depends_on:
       db:
         condition: service_healthy
@@ -34,12 +33,26 @@ services:
       context: ./dashboard
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${API_URL}
+        NEXT_PUBLIC_API_URL: https://api.linksmith.cc
     restart: unless-stopped
-    ports:
-      - "3000:3000"
     depends_on:
       - api
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - dashboard
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
