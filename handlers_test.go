@@ -308,6 +308,89 @@ func TestGetStats_NotFound(t *testing.T) {
 	}
 }
 
+func TestRedirect_SkipsPrefetchClicks(t *testing.T) {
+	cleanupURLs(t)
+	r := setupRouter()
+
+	url, _ := testStore.CreateURL(context.Background(), "https://example.com")
+
+	// Simulate a browser prefetch request (Purpose header)
+	req := httptest.NewRequest(http.MethodGet, "/"+url.ShortCode, nil)
+	req.Header.Set("Purpose", "prefetch")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Fatalf("expected status 302, got %d", w.Code)
+	}
+
+	var clickCount int
+	err := testStore.pool.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM clicks WHERE short_code = $1", url.ShortCode,
+	).Scan(&clickCount)
+	if err != nil {
+		t.Fatalf("failed to query clicks: %v", err)
+	}
+	if clickCount != 0 {
+		t.Errorf("expected 0 clicks for prefetch, got %d", clickCount)
+	}
+}
+
+func TestRedirect_SkipsSpeculativeNavigation(t *testing.T) {
+	cleanupURLs(t)
+	r := setupRouter()
+
+	url, _ := testStore.CreateURL(context.Background(), "https://example.com")
+
+	// Simulate Chrome's address bar speculation: Fetch Metadata headers
+	// are present but Sec-Fetch-User is missing (not user-initiated)
+	req := httptest.NewRequest(http.MethodGet, "/"+url.ShortCode, nil)
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	// Sec-Fetch-User intentionally omitted (speculative request)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Fatalf("expected status 302, got %d", w.Code)
+	}
+
+	var clickCount int
+	err := testStore.pool.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM clicks WHERE short_code = $1", url.ShortCode,
+	).Scan(&clickCount)
+	if err != nil {
+		t.Fatalf("failed to query clicks: %v", err)
+	}
+	if clickCount != 0 {
+		t.Errorf("expected 0 clicks for speculative navigation, got %d", clickCount)
+	}
+
+	// Now simulate a real user navigation: same Fetch Metadata headers
+	// but WITH Sec-Fetch-User: ?1 (user pressed Enter)
+	req2 := httptest.NewRequest(http.MethodGet, "/"+url.ShortCode, nil)
+	req2.Header.Set("Sec-Fetch-Dest", "document")
+	req2.Header.Set("Sec-Fetch-Mode", "navigate")
+	req2.Header.Set("Sec-Fetch-Site", "none")
+	req2.Header.Set("Sec-Fetch-User", "?1")
+	w2 := httptest.NewRecorder()
+
+	r.ServeHTTP(w2, req2)
+
+	err = testStore.pool.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM clicks WHERE short_code = $1", url.ShortCode,
+	).Scan(&clickCount)
+	if err != nil {
+		t.Fatalf("failed to query clicks: %v", err)
+	}
+	if clickCount != 1 {
+		t.Errorf("expected 1 click for real navigation, got %d", clickCount)
+	}
+}
+
 func TestGetStats_NoClicks(t *testing.T) {
 	cleanupURLs(t)
 	r := setupRouter()
