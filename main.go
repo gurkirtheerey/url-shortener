@@ -44,6 +44,7 @@ func main() {
 	// API routes (these serve JSON)
 	r.Post("/api/shorten", handleShorten(store, baseURL))
 	r.Get("/api/urls", handleListURLs(store))
+	r.Get("/api/urls/{code}/stats", handleGetStats(store))
 	r.Delete("/api/urls/{code}", handleDeleteURL(store))
 
 	// Redirect route. {code} is a URL parameter, like a wildcard.

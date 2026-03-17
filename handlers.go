@@ -2,7 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"log"
+	"net"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -45,6 +48,13 @@ func handleShorten(store *Store, baseURL string) http.HandlerFunc {
 			return
 		}
 
+		// If the user didn't include a protocol, prepend https://.
+		// Without this, "gsheerey.com" would redirect to "http://localhost:8080/gsheerey.com"
+		// instead of the actual website.
+		if !strings.HasPrefix(req.URL, "http://") && !strings.HasPrefix(req.URL, "https://") {
+			req.URL = "https://" + req.URL
+		}
+
 		url, err := store.CreateURL(r.Context(), req.URL)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to create short url"})
@@ -64,25 +74,65 @@ func handleShorten(store *Store, baseURL string) http.HandlerFunc {
 // This is the core feature. When someone visits localhost:8080/abc, Chi
 // extracts "abc" as the URL parameter "code", we look it up, and return
 // a 301 (permanent redirect) to the original URL.
+//
+// Phase 2 addition: we also log the click (IP, user agent, referrer) before
+// redirecting. If logging fails, we still redirect. Analytics shouldn't
+// break the user experience.
 func handleRedirect(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		code := chi.URLParam(r, "code")
 
 		url, err := store.GetURL(r.Context(), code)
 		if err != nil {
-			// pgx.ErrNoRows means the query returned zero results (code doesn't exist)
 			if err == pgx.ErrNoRows {
 				writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "short url not found"})
 				return
 			}
-			// Any other error is an actual database problem
 			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to look up url"})
 			return
 		}
 
-		// 301 tells the browser "this URL has permanently moved to the new location."
-		// The browser will follow the redirect automatically.
-		http.Redirect(w, r, url.OriginalURL, http.StatusMovedPermanently)
+		// Extract the client's IP address. RemoteAddr includes the port (e.g. "127.0.0.1:52341"),
+		// so we split it off. This is the IP of whoever made the request.
+		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+
+		// Log the click. If this fails, we just log the error and continue with the redirect.
+		if err := store.RecordClick(r.Context(), code, ip, r.UserAgent(), r.Referer()); err != nil {
+			log.Printf("failed to record click for %s: %v", code, err)
+		}
+
+		// 302 (temporary redirect) instead of 301 (permanent). A 301 tells the browser
+		// to cache the redirect forever, so if the mapping changes (or gets deleted),
+		// the browser would still redirect to the old URL without hitting our server.
+		// 302 forces the browser to check with us every time.
+		http.Redirect(w, r, url.OriginalURL, http.StatusFound)
+	}
+}
+
+// handleGetStats returns analytics for a single short URL.
+// It checks that the URL exists first (404 if not), then returns
+// total clicks, daily breakdown, and top referrers.
+func handleGetStats(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		code := chi.URLParam(r, "code")
+
+		// Verify the short code exists before querying stats
+		if _, err := store.GetURL(r.Context(), code); err != nil {
+			if err == pgx.ErrNoRows {
+				writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "short url not found"})
+				return
+			}
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to look up url"})
+			return
+		}
+
+		stats, err := store.GetURLStats(r.Context(), code)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to get stats"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, stats)
 	}
 }
 

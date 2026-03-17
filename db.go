@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -118,6 +119,122 @@ func (s *Store) ListURLs(ctx context.Context) ([]URL, error) {
 		urls = append(urls, u)
 	}
 	return urls, nil
+}
+
+// Click represents a single click event on a short URL.
+type Click struct {
+	ID        int64     `json:"id"`
+	ShortCode string    `json:"short_code"`
+	ClickedAt time.Time `json:"clicked_at"`
+	IPAddress string    `json:"ip_address"`
+	UserAgent string    `json:"user_agent"`
+	Referrer  string    `json:"referrer"`
+}
+
+// DailyClicks holds the click count for a single day.
+// Used by the "clicks over time" chart on the dashboard later.
+type DailyClicks struct {
+	Date   string `json:"date"`
+	Clicks int    `json:"clicks"`
+}
+
+// ReferrerCount holds a referrer and how many times it appeared.
+type ReferrerCount struct {
+	Referrer string `json:"referrer"`
+	Count    int    `json:"count"`
+}
+
+// URLStats is the full analytics response for a single short URL.
+type URLStats struct {
+	TotalClicks  int             `json:"total_clicks"`
+	DailyClicks  []DailyClicks   `json:"daily_clicks"`
+	TopReferrers []ReferrerCount `json:"top_referrers"`
+}
+
+// RecordClick logs a click event to the clicks table.
+// We extract the IP, user agent, and referrer from the HTTP request.
+// This runs during the redirect, so it adds a few ms to the response.
+// At low traffic that's fine. In Phase 6 we'll move this to a background worker.
+func (s *Store) RecordClick(ctx context.Context, shortCode, ipAddress, userAgent, referrer string) error {
+	// net.ParseIP validates the IP and returns nil if it's invalid.
+	// Postgres's INET type rejects bad IPs, so we pass nil instead of garbage.
+	var ip *string
+	if parsed := net.ParseIP(ipAddress); parsed != nil {
+		str := parsed.String()
+		ip = &str
+	}
+
+	_, err := s.pool.Exec(ctx,
+		"INSERT INTO clicks (short_code, ip_address, user_agent, referrer) VALUES ($1, $2, $3, $4)",
+		shortCode, ip, userAgent, referrer,
+	)
+	return err
+}
+
+// GetURLStats returns analytics for a single short URL:
+// total clicks, clicks per day (last 30 days), and top 10 referrers.
+// Each stat is a separate SQL query. This is simpler than one giant query
+// with JOINs, and at this scale the extra round trips don't matter.
+func (s *Store) GetURLStats(ctx context.Context, shortCode string) (*URLStats, error) {
+	stats := &URLStats{}
+
+	// Total clicks (single count)
+	err := s.pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM clicks WHERE short_code = $1",
+		shortCode,
+	).Scan(&stats.TotalClicks)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total clicks: %w", err)
+	}
+
+	// Clicks per day for the last 30 days.
+	// DATE() truncates the timestamp to just the date part.
+	// GROUP BY groups all clicks on the same day together so COUNT(*) totals them.
+	dailyRows, err := s.pool.Query(ctx, `
+		SELECT DATE(clicked_at) as day, COUNT(*) as clicks
+		FROM clicks
+		WHERE short_code = $1 AND clicked_at > NOW() - INTERVAL '30 days'
+		GROUP BY day ORDER BY day`,
+		shortCode,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get daily clicks: %w", err)
+	}
+	defer dailyRows.Close()
+
+	for dailyRows.Next() {
+		var dc DailyClicks
+		var day time.Time
+		if err := dailyRows.Scan(&day, &dc.Clicks); err != nil {
+			return nil, err
+		}
+		dc.Date = day.Format("2006-01-02") // Go's date format (looks weird, but it's always this exact date)
+		stats.DailyClicks = append(stats.DailyClicks, dc)
+	}
+
+	// Top 10 referrers. Groups by referrer string and counts occurrences.
+	// Filters out empty referrers (direct visits with no referrer header).
+	referrerRows, err := s.pool.Query(ctx, `
+		SELECT referrer, COUNT(*) as count
+		FROM clicks
+		WHERE short_code = $1 AND referrer IS NOT NULL AND referrer != ''
+		GROUP BY referrer ORDER BY count DESC LIMIT 10`,
+		shortCode,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get top referrers: %w", err)
+	}
+	defer referrerRows.Close()
+
+	for referrerRows.Next() {
+		var rc ReferrerCount
+		if err := referrerRows.Scan(&rc.Referrer, &rc.Count); err != nil {
+			return nil, err
+		}
+		stats.TopReferrers = append(stats.TopReferrers, rc)
+	}
+
+	return stats, nil
 }
 
 // DeleteURL removes a URL by short code.

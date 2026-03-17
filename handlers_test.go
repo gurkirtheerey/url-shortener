@@ -32,7 +32,12 @@ func TestMain(m *testing.M) {
 
 func cleanupURLs(t *testing.T) {
 	t.Helper()
-	_, err := testStore.pool.Exec(context.Background(), "DELETE FROM urls")
+	// Delete clicks first because they have a foreign key referencing urls
+	_, err := testStore.pool.Exec(context.Background(), "DELETE FROM clicks")
+	if err != nil {
+		t.Fatalf("failed to clean clicks table: %v", err)
+	}
+	_, err = testStore.pool.Exec(context.Background(), "DELETE FROM urls")
 	if err != nil {
 		t.Fatalf("failed to clean urls table: %v", err)
 	}
@@ -47,6 +52,7 @@ func setupRouter() *chi.Mux {
 	r := chi.NewRouter()
 	r.Post("/api/shorten", handleShorten(testStore, "http://localhost:8080"))
 	r.Get("/api/urls", handleListURLs(testStore))
+	r.Get("/api/urls/{code}/stats", handleGetStats(testStore))
 	r.Delete("/api/urls/{code}", handleDeleteURL(testStore))
 	r.Get("/{code}", handleRedirect(testStore))
 	return r
@@ -111,7 +117,7 @@ func TestRedirect(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusMovedPermanently {
+	if w.Code != http.StatusFound {
 		t.Fatalf("expected status 301, got %d", w.Code)
 	}
 
@@ -191,5 +197,115 @@ func TestDeleteURL_NotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", w.Code)
+	}
+}
+
+func TestRedirect_RecordsClick(t *testing.T) {
+	cleanupURLs(t)
+	r := setupRouter()
+
+	url, _ := testStore.CreateURL(context.Background(), "https://example.com")
+
+	// Hit the redirect endpoint with a user agent and referrer
+	req := httptest.NewRequest(http.MethodGet, "/"+url.ShortCode, nil)
+	req.Header.Set("User-Agent", "TestBrowser/1.0")
+	req.Header.Set("Referer", "https://twitter.com")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Fatalf("expected status 301, got %d", w.Code)
+	}
+
+	// Verify a click was recorded
+	var clickCount int
+	err := testStore.pool.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM clicks WHERE short_code = $1", url.ShortCode,
+	).Scan(&clickCount)
+	if err != nil {
+		t.Fatalf("failed to query clicks: %v", err)
+	}
+	if clickCount != 1 {
+		t.Errorf("expected 1 click, got %d", clickCount)
+	}
+}
+
+func TestGetStats(t *testing.T) {
+	cleanupURLs(t)
+	r := setupRouter()
+
+	url, _ := testStore.CreateURL(context.Background(), "https://example.com")
+
+	// Simulate 3 clicks with different referrers
+	testStore.RecordClick(context.Background(), url.ShortCode, "127.0.0.1", "TestBrowser/1.0", "https://twitter.com")
+	testStore.RecordClick(context.Background(), url.ShortCode, "127.0.0.1", "TestBrowser/1.0", "https://twitter.com")
+	testStore.RecordClick(context.Background(), url.ShortCode, "127.0.0.1", "TestBrowser/1.0", "https://reddit.com")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/urls/"+url.ShortCode+"/stats", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var stats URLStats
+	json.NewDecoder(w.Body).Decode(&stats)
+
+	if stats.TotalClicks != 3 {
+		t.Errorf("expected 3 total clicks, got %d", stats.TotalClicks)
+	}
+	if len(stats.DailyClicks) != 1 {
+		t.Errorf("expected 1 day of clicks, got %d", len(stats.DailyClicks))
+	}
+	if len(stats.TopReferrers) != 2 {
+		t.Errorf("expected 2 referrers, got %d", len(stats.TopReferrers))
+	}
+	// Twitter should be first (2 clicks) and Reddit second (1 click)
+	if len(stats.TopReferrers) >= 2 {
+		if stats.TopReferrers[0].Referrer != "https://twitter.com" {
+			t.Errorf("expected top referrer to be twitter, got %s", stats.TopReferrers[0].Referrer)
+		}
+		if stats.TopReferrers[0].Count != 2 {
+			t.Errorf("expected twitter count 2, got %d", stats.TopReferrers[0].Count)
+		}
+	}
+}
+
+func TestGetStats_NotFound(t *testing.T) {
+	r := setupRouter()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/urls/nonexistent/stats", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", w.Code)
+	}
+}
+
+func TestGetStats_NoClicks(t *testing.T) {
+	cleanupURLs(t)
+	r := setupRouter()
+
+	url, _ := testStore.CreateURL(context.Background(), "https://example.com")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/urls/"+url.ShortCode+"/stats", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var stats URLStats
+	json.NewDecoder(w.Body).Decode(&stats)
+
+	if stats.TotalClicks != 0 {
+		t.Errorf("expected 0 total clicks, got %d", stats.TotalClicks)
 	}
 }
