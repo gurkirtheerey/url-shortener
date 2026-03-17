@@ -33,13 +33,15 @@ jobs:
 
             if [ "$GITHUB_EVENT_NAME" = "push" ]; then
               # Production deploy
-              cd ~/linksmith/prod
+              DEPLOY_DIR=~/linksmith/prod
+              cd "$DEPLOY_DIR"
               git pull origin main
               echo '${{ secrets.DROPLET_ENV_PROD }}' > .env.prod
               docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
             else
               # Dev deploy from PR branch
-              cd ~/linksmith/dev
+              DEPLOY_DIR=~/linksmith/dev
+              cd "$DEPLOY_DIR"
               git fetch origin
               git checkout "$GITHUB_HEAD_REF"
               git pull origin "$GITHUB_HEAD_REF"
@@ -47,9 +49,9 @@ jobs:
               docker compose -f docker-compose.prod.yml --env-file .env.dev up -d --build
             fi
 
-            # Sync Caddy config from prod (source of truth for infra)
-            cp ~/linksmith/prod/Caddyfile ~/linksmith/caddy/Caddyfile
-            cp ~/linksmith/prod/docker-compose.caddy.yml ~/linksmith/caddy/docker-compose.yml
+            # Sync Caddy config from whichever directory just deployed
+            cp "$DEPLOY_DIR/Caddyfile" ~/linksmith/caddy/Caddyfile
+            cp "$DEPLOY_DIR/docker-compose.caddy.yml" ~/linksmith/caddy/docker-compose.yml
             cd ~/linksmith/caddy
             docker compose up -d
             docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || true
