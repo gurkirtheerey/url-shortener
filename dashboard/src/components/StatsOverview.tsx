@@ -55,7 +55,7 @@ export default function StatsOverview({ stats }: { stats: UrlStats }) {
   return (
     <div className="grid grid-cols-3 gap-3">
       <div
-        className="border border-amber-900/30 rounded-lg p-4 bg-gradient-to-br from-amber-500/[0.04] to-transparent hover:border-amber-900/50 transition-colors opacity-0 animate-[fadeInUp_0.4s_ease-out_forwards]"
+        className="border border-amber-900/30 rounded-lg p-4 bg-gradient-to-br from-amber-500/[0.04] to-transparent hover:border-amber-900/50 transition-colors opacity-0 animate-fade-in-up"
       >
         <p className="text-zinc-500 text-[10px] uppercase tracking-wider mb-2">
           Total Clicks
@@ -75,7 +75,7 @@ export default function StatsOverview({ stats }: { stats: UrlStats }) {
       </div>
 
       <div
-        className="border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors opacity-0 animate-[fadeInUp_0.4s_ease-out_forwards]"
+        className="border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors opacity-0 animate-fade-in-up"
         style={{ animationDelay: "80ms" }}
       >
         <p className="text-zinc-500 text-[10px] uppercase tracking-wider mb-2">
@@ -87,7 +87,7 @@ export default function StatsOverview({ stats }: { stats: UrlStats }) {
       </div>
 
       <div
-        className="border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors opacity-0 animate-[fadeInUp_0.4s_ease-out_forwards]"
+        className="border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors opacity-0 animate-fade-in-up"
         style={{ animationDelay: "160ms" }}
       >
         <p className="text-zinc-500 text-[10px] uppercase tracking-wider mb-2">

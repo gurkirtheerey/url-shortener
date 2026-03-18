@@ -89,7 +89,7 @@ export default function LinkDetailPage({
         &larr; Back
       </Link>
 
-      <div className="opacity-0 animate-[fadeInUp_0.4s_ease-out_forwards]">
+      <div className="opacity-0 animate-fade-in-up">
         <div className="flex items-center gap-3 mb-2">
           <h1 className="text-lg font-mono text-amber-400 font-semibold">
             /{code}

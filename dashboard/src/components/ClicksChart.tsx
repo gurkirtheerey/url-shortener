@@ -61,7 +61,7 @@ export default function ClicksChart({
 
   return (
     <div
-      className="border border-zinc-800 rounded-lg p-6 opacity-0 animate-[fadeInUp_0.4s_ease-out_forwards]"
+      className="border border-zinc-800 rounded-lg p-6 opacity-0 animate-fade-in-up"
       style={{ animationDelay: "240ms" }}
     >
       <div className="flex items-center justify-between mb-4">
