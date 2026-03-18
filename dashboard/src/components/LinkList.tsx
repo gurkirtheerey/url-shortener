@@ -56,7 +56,7 @@ export default function LinkList() {
         {urls.map((url, index) => (
           <div
             key={url.id}
-            className="opacity-0 animate-[fadeInUp_0.35s_ease-out_forwards]"
+            className="opacity-0 animate-fade-in-up"
             style={{ animationDelay: `${index * 60}ms` }}
           >
             <LinkRow url={url} />

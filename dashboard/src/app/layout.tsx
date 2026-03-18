@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import QueryProvider from "@/components/QueryProvider";
+import Footer from "@/components/Footer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,7 +30,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <QueryProvider>
-          <main className="max-w-2xl mx-auto px-6 py-12">{children}</main>
+          <div className="max-w-2xl mx-auto px-6 py-12 min-h-dvh flex flex-col">
+            <main className="flex-1">{children}</main>
+            <Footer />
+          </div>
         </QueryProvider>
       </body>
     </html>
