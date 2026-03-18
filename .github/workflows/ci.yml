@@ -82,17 +82,3 @@ jobs:
 
       - name: Build
         run: npm run build
-
-  docker:
-    name: Docker (build images)
-    runs-on: ubuntu-latest
-    needs: [go, dashboard]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build Go API image
-        run: docker build -t url-shortener-api .
-
-      - name: Build Dashboard image
-        run: docker build -t url-shortener-dashboard ./dashboard

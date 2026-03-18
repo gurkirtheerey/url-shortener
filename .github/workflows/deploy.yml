@@ -6,8 +6,61 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+env:
+  API_IMAGE: ghcr.io/gurkirtheerey/url-shortener-api
+  DASHBOARD_IMAGE: ghcr.io/gurkirtheerey/url-shortener-dashboard
+
 jobs:
+  build:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "value=latest" >> $GITHUB_OUTPUT
+          else
+            echo "value=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.API_IMAGE }}:${{ steps.tag.outputs.value }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Dashboard image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dashboard
+          push: true
+          tags: ${{ env.DASHBOARD_IMAGE }}:${{ steps.tag.outputs.value }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.linksmith.cc
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   deploy:
+    name: Deploy to droplet
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
@@ -19,6 +72,16 @@ jobs:
           envs: GITHUB_EVENT_NAME,GITHUB_HEAD_REF
           script: |
             set -e
+
+            # Log in to GHCR to pull pre-built images
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+            # Determine image tag
+            if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+              export IMAGE_TAG=latest
+            else
+              export IMAGE_TAG=dev
+            fi
 
             # Bootstrap shared network and directory layout (idempotent)
             docker network create caddy-net 2>/dev/null || true
@@ -32,24 +95,24 @@ jobs:
             fi
 
             if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-              # Production deploy
               DEPLOY_DIR=~/linksmith/prod
               cd "$DEPLOY_DIR"
               git pull origin main
               echo '${{ secrets.DROPLET_ENV_PROD }}' > .env.prod
-              docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+              docker compose -f docker-compose.prod.yml --env-file .env.prod pull api dashboard
+              docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
             else
-              # Dev deploy from PR branch
               DEPLOY_DIR=~/linksmith/dev
               cd "$DEPLOY_DIR"
               git fetch origin
               git checkout "$GITHUB_HEAD_REF"
               git pull origin "$GITHUB_HEAD_REF"
               echo '${{ secrets.DROPLET_ENV_DEV }}' > .env.dev
-              docker compose -f docker-compose.prod.yml --env-file .env.dev up -d --build
+              docker compose -f docker-compose.prod.yml --env-file .env.dev pull api dashboard
+              docker compose -f docker-compose.prod.yml --env-file .env.dev up -d
             fi
 
-            # Sync Caddy config from whichever directory just deployed
+            # Sync Caddy config
             cp "$DEPLOY_DIR/Caddyfile" ~/linksmith/caddy/Caddyfile
             cp "$DEPLOY_DIR/docker-compose.caddy.yml" ~/linksmith/caddy/docker-compose.yml
             cd ~/linksmith/caddy
