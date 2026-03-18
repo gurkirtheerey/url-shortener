@@ -3,12 +3,9 @@ import LinkList from "@/components/LinkList";
 
 export default function Home() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Shortener</h1>
-        <p className="text-zinc-500 text-sm mt-1">
-          Shorten URLs and track clicks.
-        </p>
+        <h1 className="text-lg font-semibold tracking-tight">linksmith</h1>
       </div>
       <ShortenForm />
       <LinkList />

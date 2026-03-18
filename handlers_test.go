@@ -186,6 +186,33 @@ func TestListURLs(t *testing.T) {
 	}
 }
 
+func TestListURLs_WithClickCounts(t *testing.T) {
+	cleanupURLs(t)
+	r := setupRouter()
+
+	url1, _ := testStore.CreateURL(context.Background(), "https://example.com")
+	testStore.CreateURL(context.Background(), "https://google.com")
+
+	testStore.RecordClick(context.Background(), url1.ShortCode, "127.0.0.1", "TestBrowser", "")
+	testStore.RecordClick(context.Background(), url1.ShortCode, "127.0.0.1", "TestBrowser", "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/urls", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	var urls []URL
+	json.NewDecoder(w.Body).Decode(&urls)
+
+	// Ordered newest first: google.com (0 clicks), example.com (2 clicks)
+	if urls[0].ClickCount != 0 {
+		t.Errorf("expected 0 clicks for google.com, got %d", urls[0].ClickCount)
+	}
+	if urls[1].ClickCount != 2 {
+		t.Errorf("expected 2 clicks for example.com, got %d", urls[1].ClickCount)
+	}
+}
+
 func TestDeleteURL(t *testing.T) {
 	cleanupURLs(t)
 	r := setupRouter()
