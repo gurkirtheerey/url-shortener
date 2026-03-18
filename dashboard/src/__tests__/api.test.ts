@@ -15,6 +15,7 @@ describe("fetchUrls", () => {
         short_code: "abc",
         original_url: "https://example.com",
         created_at: "2024-01-01T00:00:00Z",
+        click_count: 5,
       },
     ];
     mockFetch.mockResolvedValueOnce({

@@ -102,13 +102,22 @@ func handleRedirect(store *Store) http.HandlerFunc {
 			return
 		}
 
-		// Extract the client's IP address. RemoteAddr includes the port (e.g. "127.0.0.1:52341"),
-		// so we split it off. This is the IP of whoever made the request.
-		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+		// Only record clicks for real user navigations to avoid double-counting.
+		// Chrome sends a speculative request when you paste a URL in the address
+		// bar (before pressing Enter). The reliable way to distinguish real vs
+		// speculative: browsers set Sec-Fetch-User: ?1 only on user-triggered
+		// navigations (link clicks, pressing Enter). If Fetch Metadata headers
+		// are present but Sec-Fetch-User is missing, it's speculative.
+		// For clients without Fetch Metadata (curl, old browsers), allow the click.
+		isPrefetch := r.Header.Get("Purpose") == "prefetch" || r.Header.Get("Sec-Purpose") == "prefetch"
+		hasFetchMetadata := r.Header.Get("Sec-Fetch-Dest") != ""
+		isUserNavigation := !hasFetchMetadata || r.Header.Get("Sec-Fetch-User") == "?1"
 
-		// Log the click. If this fails, we just log the error and continue with the redirect.
-		if err := store.RecordClick(r.Context(), code, ip, r.UserAgent(), r.Referer()); err != nil {
-			log.Printf("failed to record click for %s: %v", code, err)
+		if !isPrefetch && isUserNavigation {
+			ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+			if err := store.RecordClick(r.Context(), code, ip, r.UserAgent(), r.Referer()); err != nil {
+				log.Printf("failed to record click for %s: %v", code, err)
+			}
 		}
 
 		// 302 (temporary redirect) instead of 301 (permanent). A 301 tells the browser

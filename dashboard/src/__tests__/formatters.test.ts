@@ -1,4 +1,4 @@
-import { relativeTime, truncateUrl, formatNumber, formatDate } from "@/lib/formatters";
+import { relativeTime, truncateUrl, formatNumber, formatDate, formatShortDate } from "@/lib/formatters";
 
 describe("relativeTime", () => {
   it("returns 'just now' for dates less than a minute ago", () => {
@@ -75,5 +75,17 @@ describe("formatDate", () => {
   it("formats ISO date string to readable format", () => {
     const result = formatDate("2024-03-15T10:30:00Z");
     expect(result).toMatch(/Mar 15, 2024/);
+  });
+});
+
+describe("formatShortDate", () => {
+  it("formats date as short month and day", () => {
+    const result = formatShortDate("2024-03-15T12:00:00Z");
+    expect(result).toMatch(/Mar 15/);
+  });
+
+  it("handles different months", () => {
+    const result = formatShortDate("2024-12-25T12:00:00Z");
+    expect(result).toMatch(/Dec 25/);
   });
 });

@@ -2,10 +2,21 @@
 
 import { useState } from "react";
 
-export default function CopyButton({ text }: { text: string }) {
+const defaultClassName =
+  "text-xs text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer";
+
+export default function CopyButton({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
   const [copied, setCopied] = useState(false);
 
-  async function handleCopy() {
+  async function handleCopy(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -18,7 +29,7 @@ export default function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="text-xs text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer"
+      className={className ?? defaultClassName}
       title="Copy to clipboard"
     >
       {copied ? "Copied!" : "Copy"}

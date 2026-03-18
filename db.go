@@ -17,6 +17,7 @@ type URL struct {
 	ShortCode   string    `json:"short_code"`
 	OriginalURL string    `json:"original_url"`
 	CreatedAt   time.Time `json:"created_at"`
+	ClickCount  int       `json:"click_count"`
 }
 
 // Store is the database layer. It holds a connection pool and provides
@@ -106,18 +107,21 @@ func (s *Store) GetURL(ctx context.Context, shortCode string) (*URL, error) {
 // row's columns into our URL struct fields (order matters here, it must
 // match the SELECT column order).
 func (s *Store) ListURLs(ctx context.Context) ([]URL, error) {
-	rows, err := s.pool.Query(ctx,
-		"SELECT id, short_code, original_url, created_at FROM urls ORDER BY created_at DESC",
+	rows, err := s.pool.Query(ctx, `
+		SELECT u.id, u.short_code, u.original_url, u.created_at,
+		       (SELECT COUNT(*) FROM clicks c WHERE c.short_code = u.short_code)
+		FROM urls u
+		ORDER BY u.created_at DESC`,
 	)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close() // always close rows when done, or you leak connections
+	defer rows.Close()
 
 	var urls []URL
 	for rows.Next() {
 		var u URL
-		if err := rows.Scan(&u.ID, &u.ShortCode, &u.OriginalURL, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.ShortCode, &u.OriginalURL, &u.CreatedAt, &u.ClickCount); err != nil {
 			return nil, err
 		}
 		urls = append(urls, u)
