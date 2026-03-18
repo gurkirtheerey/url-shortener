@@ -14,7 +14,9 @@ export default function LinkRow({ url }: { url: ShortenedUrl }) {
   const shortUrl = `${API_URL}/${url.short_code}`;
   const clickCount = url.click_count ?? 0;
 
-  function handleDelete() {
+  function handleDelete(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
     if (!confirming) {
       setConfirming(true);
       return;
@@ -24,7 +26,10 @@ export default function LinkRow({ url }: { url: ShortenedUrl }) {
   }
 
   return (
-    <div className="group border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
+    <Link
+      href={`/link/${url.short_code}`}
+      className="group block border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors"
+    >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <span className="font-mono text-sm text-amber-400">
@@ -50,12 +55,9 @@ export default function LinkRow({ url }: { url: ShortenedUrl }) {
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <Link
-            href={`/link/${url.short_code}`}
-            className="text-xs text-zinc-500 hover:text-amber-400 transition-colors"
-          >
+          <span className="text-xs text-zinc-500 group-hover:text-amber-400 transition-colors">
             Stats
-          </Link>
+          </span>
           <button
             onClick={handleDelete}
             onBlur={() => setConfirming(false)}
@@ -70,6 +72,6 @@ export default function LinkRow({ url }: { url: ShortenedUrl }) {
           </button>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
