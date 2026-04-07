@@ -89,17 +89,19 @@ Click events published to Redis Streams instead of written to Postgres during re
 # Set your database URL
 export DATABASE_URL=postgres://user:pass@localhost:5432/shortener
 
-# Create the urls table
-psql $DATABASE_URL -c "
-CREATE TABLE urls (
-    id SERIAL PRIMARY KEY,
-    short_code VARCHAR(10) UNIQUE NOT NULL,
-    original_url TEXT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);"
+# Run database migrations
+go run . migrate
 
 # Run the server
 go run .
+```
+
+### Run the Dashboard
+
+```bash
+cd dashboard
+npm ci
+NEXT_PUBLIC_API_URL=http://localhost:8080 npm run dev
 ```
 
 ### Usage
@@ -125,3 +127,35 @@ curl -X DELETE http://localhost:8080/api/urls/abc123
 ```bash
 go test ./...
 ```
+
+## Render Deployment
+
+This repo now includes a `render.yaml` blueprint that provisions:
+
+1. A managed Postgres database
+2. A Go web service for the API
+3. A Node web service for the Next.js dashboard
+
+The API service runs `./bin/server migrate` as its Render `preDeployCommand`, so schema changes are applied before each deploy.
+
+Automatic Render deploys are disabled in `render.yaml`. Production deploys are triggered by GitHub Actions only after the `CI` workflow passes on `main`.
+
+### Render Setup
+
+1. Push this repo to GitHub.
+2. In Render, create a new Blueprint and point it at the repo.
+3. Review `render.yaml` and adjust service names, plans, regions, or domains if needed.
+4. Sync the Blueprint to create the database, API, and dashboard.
+5. In GitHub Actions, add these repository secrets:
+   - `RENDER_API_DEPLOY_HOOK_URL`
+   - `RENDER_DASHBOARD_DEPLOY_HOOK_URL`
+6. In Render, open each web service and copy its deploy hook URL into the matching GitHub secret.
+7. Point your DNS records at the Render services for `api.linksmith.cc` and `app.linksmith.cc`.
+
+### Production Cutover
+
+1. Export your current Postgres data from the existing production host.
+2. Restore it into the new Render Postgres database.
+3. Merge to `main` and let GitHub Actions trigger both Render deploy hooks after CI passes.
+4. Verify `/health`, URL creation, redirects, and dashboard reads.
+5. Decommission any remaining host-based deploy infrastructure once traffic is cut over.

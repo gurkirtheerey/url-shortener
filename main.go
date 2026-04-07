@@ -16,12 +16,26 @@ import (
 )
 
 func main() {
-	// Config from environment variables, with sensible defaults for local dev.
-	// In production, set these via your hosting platform (Fly.io secrets, etc.)
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		databaseURL = "postgres://localhost:5432/url_shortener"
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "migrate":
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			if err := runMigrationsCommand(ctx, databaseURLFromEnv()); err != nil {
+				log.Fatalf("failed to run migrations: %v", err)
+			}
+
+			log.Println("migrations complete")
+			return
+		default:
+			log.Fatalf("unknown command: %s", os.Args[1])
+		}
 	}
+
+	// Config from environment variables, with sensible defaults for local dev.
+	// In production, set these via your hosting platform.
+	databaseURL := databaseURLFromEnv()
 
 	baseURL := os.Getenv("BASE_URL")
 	if baseURL == "" {
@@ -95,14 +109,14 @@ func main() {
 		}
 	}()
 
-	// Block until we receive SIGINT (Ctrl+C) or SIGTERM (what Fly sends on deploy).
+	// Block until we receive SIGINT (Ctrl+C) or SIGTERM (what most hosts send on deploy).
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	fmt.Println("Shutting down server...")
 
-	// Give in-flight requests 10 seconds to finish (matches Fly's default kill_timeout).
+	// Give in-flight requests 10 seconds to finish before the process exits.
 	// After the deadline, Shutdown returns an error and the process exits.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -112,4 +126,13 @@ func main() {
 	}
 
 	fmt.Println("Server stopped")
+}
+
+func databaseURLFromEnv() string {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		return "postgres://localhost:5432/url_shortener"
+	}
+
+	return databaseURL
 }

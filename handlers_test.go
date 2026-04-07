@@ -27,6 +27,10 @@ func TestMain(m *testing.M) {
 	}
 	defer testStore.Close()
 
+	if err := runMigrations(context.Background(), testStore.pool); err != nil {
+		panic("failed to run test migrations: " + err.Error())
+	}
+
 	os.Exit(m.Run())
 }
 

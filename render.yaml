@@ -1,0 +1,42 @@
+databases:
+  - name: linksmith-db
+    databaseName: linksmith
+    user: linksmith
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: linksmith-api
+    runtime: go
+    rootDir: .
+    autoDeployTrigger: off
+    buildCommand: go build -o bin/server .
+    preDeployCommand: ./bin/server migrate
+    startCommand: ./bin/server
+    healthCheckPath: /health
+    domains:
+      - api.linksmith.cc
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: linksmith-db
+          property: connectionString
+      - key: BASE_URL
+        value: https://api.linksmith.cc
+      - key: CORS_ORIGIN
+        value: https://app.linksmith.cc
+
+  - type: web
+    name: linksmith-dashboard
+    runtime: node
+    rootDir: dashboard
+    autoDeployTrigger: off
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start -- --hostname 0.0.0.0 --port $PORT
+    domains:
+      - app.linksmith.cc
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_PUBLIC_API_URL
+        value: https://api.linksmith.cc

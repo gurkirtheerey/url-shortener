@@ -1,17 +1,13 @@
 .git
 *_test.go
-migrations/
 CLAUDE.md
 README.md
 dashboard/node_modules
 dashboard/.next
 docker-compose.yml
-docker-compose.prod.yml
 Dockerfile.dev
-Caddyfile
 dump.sql
 .env
 .env.dev
 .env.prod
 .env.example
-docker-compose.caddy.yml
